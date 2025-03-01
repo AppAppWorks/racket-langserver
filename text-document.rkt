@@ -91,7 +91,7 @@
 (define (did-change! params)
   (match-define (hash-table ['textDocument (DocIdentifier #:version version #:uri uri)]
                             ['contentChanges content-changes]) params)
-  (define safe-doc (hash-ref open-docs (string->symbol uri)))
+  (define safe-doc (uri->safe-doc uri))
   (define content-changes*
     (cond [(eq? (json-null) content-changes) empty]
           [(list? content-changes) content-changes]
@@ -121,7 +121,7 @@
   (match params
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['position (Pos #:line line #:char ch)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
          (define doc-trace (Doc-trace doc))
@@ -130,15 +130,15 @@
          (define-values (start end text)
            (interval-map-ref/bounds hovers pos #f))
          (match-define (list link tag)
-                       (interval-map-ref (send doc-trace get-docs) pos (list #f #f)))
+           (interval-map-ref (send doc-trace get-docs) pos (list #f #f)))
          (define result
            (cond [text
                   ;; We want signatures from `scribble/blueboxes` as they have better indentation,
                   ;; but in some super rare cases blueboxes aren't accessible, thus we try to use the
                   ;; parsed signature instead
                   (define-values (sigs args-descr)
-                                (if tag
-                                    (get-docs-for-tag tag)
+                    (if tag
+                        (get-docs-for-tag tag)
                         (values #f #f)))
                   (define maybe-signature
                     (if sigs
@@ -151,7 +151,7 @@
                     (if link
                         (~a (or maybe-signature "")
                             (or (extract-documentation-for-selected-element
-                                  link #:include-signature? (not maybe-signature))
+                                 link #:include-signature? (not maybe-signature))
                                 ""))
                         ""))
                   (define contents (if link
@@ -180,7 +180,7 @@
                  ; 2. `only: CodeActionKind[]` server should use this to filter out client-unwanted code action
                  ; 3. `triggerKind?: CodeActionTriggerKind` the reason why code action were requested
                  ['context _ctx])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
 
      (define act
        (with-read-doc safe-doc
@@ -202,7 +202,7 @@
   (match params
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['position (Pos #:line line #:char ch)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
          (define doc-trace (Doc-trace doc))
@@ -240,7 +240,7 @@
   (match params
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['position (Pos #:line line #:char ch)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
          (define doc-trace (Doc-trace doc))
@@ -260,7 +260,7 @@
                  ['position (Pos #:line line #:char char)])
      (define-values (start end decl) (get-decl uri line char))
 
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
 
      (define result
        (with-read-doc safe-doc
@@ -285,7 +285,7 @@
                  ['context (hash-table ['includeDeclaration include-decl?])])
      (define-values (start end decl) (get-decl uri line char))
 
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
 
      (define result
        (with-read-doc safe-doc
@@ -310,7 +310,7 @@
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['position (Pos #:line line #:char char)])
 
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
 
      (define-values (start end decl) (get-decl uri line char))
      (define result
@@ -351,10 +351,10 @@
                      (define ranges (cons (start/end->range doc left right)
                                           (get-bindings uri decl)))
                      (WorkspaceEdit
-                       #:changes
-                       (hasheq (string->symbol uri)
-                               (for/list ([range (in-list ranges)])
-                                 (TextEdit #:range range #:newText new-name))))])]
+                      #:changes
+                      (hasheq (string->symbol uri)
+                              (for/list ([range (in-list ranges)])
+                                (TextEdit #:range range #:newText new-name))))])]
              [#f (json-null)]))))
      (success-response id result)]
     [_
@@ -380,7 +380,7 @@
 ;; the declaration. If #:include-decl is 'all, the list includes the declaration
 ;; and all bound occurrences.
 (define (get-bindings uri decl)
-  (define safe-doc (hash-ref open-docs (string->symbol uri)))
+  (define safe-doc (uri->safe-doc uri))
   (with-read-doc safe-doc
     (λ (doc)
       (define doc-trace (Doc-trace doc))
@@ -395,7 +395,7 @@
           empty))))
 
 (define (get-decl uri line char)
-  (define safe-doc (hash-ref open-docs (string->symbol uri)))
+  (define safe-doc (uri->safe-doc uri))
   (with-read-doc safe-doc
     (λ (doc)
       (define doc-trace (Doc-trace doc))
@@ -419,7 +419,7 @@
 (define (document-symbol id params)
   (match params
     [(hash-table ['textDocument (DocIdentifier #:uri uri)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
 
      (define results
        (with-read-doc safe-doc
@@ -457,7 +457,7 @@
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['options (as-FormattingOptions opts)])
 
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
          (define-values (st-ln st-ch) (doc-line/ch doc 0))
@@ -473,7 +473,7 @@
                  ['range (Range #:start (Pos #:line st-ln #:char st-ch)
                                 #:end (Pos #:line ed-ln #:char ed-ch))]
                  ['options (as-FormattingOptions opts)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
          (success-response id (format! doc st-ln st-ch ed-ln ed-ch #:formatting-options opts))))]
@@ -490,7 +490,7 @@
                  ['position (Pos #:line line #:char char)]
                  ['ch ch]
                  ['options (as-FormattingOptions opts)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
 
      (with-read-doc safe-doc
        (λ (doc)
@@ -515,7 +515,7 @@
 (define (full-semantic-tokens id params)
   (match params
     [(hash-table ['textDocument (DocIdentifier #:uri uri)])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (semantic-tokens uri id safe-doc 0 (with-read-doc safe-doc (λ (doc) (doc-endpos doc))))]
     [_ (error-response id INVALID-PARAMS "textDocument/semanticTokens/full failed")]))
 
@@ -524,12 +524,12 @@
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['range (Range #:start (Pos #:line st-ln #:char st-ch)
                                 #:end (Pos #:line ed-ln #:char ed-ch))])
-     (define safe-doc (hash-ref open-docs (string->symbol uri)))
+     (define safe-doc (uri->safe-doc uri))
      (define-values (start-pos end-pos)
-                   (with-read-doc safe-doc
-                     (λ (doc)
+       (with-read-doc safe-doc
+         (λ (doc)
            (values (doc-pos doc st-ln st-ch)
-                             (doc-pos doc ed-ln ed-ch)))))
+                   (doc-pos doc ed-ln ed-ch)))))
      (semantic-tokens uri id safe-doc start-pos end-pos)]
     [_ (error-response id INVALID-PARAMS "textDocument/semanticTokens/range failed")]))
 
@@ -543,32 +543,32 @@
   (if tokens
       (success-response id (hash 'data tokens))
       (async-query-wait
-        uri
-        (λ (_signal)
-          (define tokens (with-read-doc safe-doc (λ (doc) (doc-range-tokens doc start-pos end-pos))))
-          (success-response id (hash 'data tokens))))))
+       uri
+       (λ (_signal)
+         (define tokens (with-read-doc safe-doc (λ (doc) (doc-range-tokens doc start-pos end-pos))))
+         (success-response id (hash 'data tokens))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
-  (contract-out
-    [did-open! (jsexpr? . -> . void?)]
-    [did-close! (jsexpr? . -> . void?)]
-    [did-change! (jsexpr? . -> . void?)]
-    [hover (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [code-action (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [completion (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [signatureHelp (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [definition (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [document-highlight (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [references (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [document-symbol (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [inlay-hint (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [rename _rename rename (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [prepareRename (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [formatting! (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [range-formatting! (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [on-type-formatting! (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
-    [full-semantic-tokens (exact-nonnegative-integer? jsexpr? . -> . (or/c jsexpr? (-> jsexpr?)))]
-    [range-semantic-tokens (exact-nonnegative-integer? jsexpr? . -> . (or/c jsexpr? (-> jsexpr?)))]))
+ (contract-out
+  [did-open! (jsexpr? . -> . void?)]
+  [did-close! (jsexpr? . -> . void?)]
+  [did-change! (jsexpr? . -> . void?)]
+  [hover (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [code-action (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [completion (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [signatureHelp (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [definition (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [document-highlight (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [references (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [document-symbol (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [inlay-hint (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [rename _rename rename (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [prepareRename (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [formatting! (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [range-formatting! (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [on-type-formatting! (exact-nonnegative-integer? jsexpr? . -> . jsexpr?)]
+  [full-semantic-tokens (exact-nonnegative-integer? jsexpr? . -> . (or/c jsexpr? (-> jsexpr?)))]
+  [range-semantic-tokens (exact-nonnegative-integer? jsexpr? . -> . (or/c jsexpr? (-> jsexpr?)))]))
 

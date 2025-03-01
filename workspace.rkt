@@ -29,7 +29,7 @@
     (clear-old-queries/doc-close old-uri)
 
     (if (string-suffix? new-uri ".rkt")
-      (let ([safe-doc (hash-ref open-docs (string->symbol old-uri) #f)])
+      (let ([safe-doc (uri->safe-doc old-uri)])
         ; `safe-doc = #f` should be rarely happened.
         ; we simply give up to handle it, let's trust LSP client will send others request about analysis this file.
         (when safe-doc
