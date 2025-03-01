@@ -40,13 +40,13 @@
 
 ;; the only place where really run check-syntax
 (define (doc-run-check-syntax! safe-doc)
-  (match-define (list uri old-version text)
+  (define-values (uri old-version text)
                 (with-read-doc safe-doc
                   (λ (doc)
-                    (list (Doc-uri doc) (Doc-version doc) (send (Doc-text doc) copy)))))
+                    (values (Doc-uri doc) (Doc-version doc) (send (Doc-text doc) copy)))))
 
   (define (task)
-    (match-define (list new-trace diags) (check-syntax (uri->path uri) text))
+    (define-values (new-trace diags) (check-syntax (uri->path uri) text))
     ;; make a new thread to write doc because this task will be executed by
     ;; the scheduler and can be killed at any time.
     (thread
@@ -114,7 +114,7 @@
   (send (Doc-text doc) line/char->pos line ch))
 
 (define (doc-line/ch doc pos)
-  (match-define (list line char) (send (Doc-text doc) pos->line/char pos))
+  (define-values (line char) (send (Doc-text doc) pos->line/char pos))
   (values line char))
 
 (define (doc-line-start-pos doc line)
@@ -215,8 +215,8 @@
   (define doc-text (new lsp-editor%))
   (send doc-text load-file path)
   (match-define (cons start end) (get-def path doc-text id))
-  (match-define (list st-ln st-ch) (send doc-text pos->line/char start))
-  (match-define (list ed-ln ed-ch) (send doc-text pos->line/char end))
+  (define-values (st-ln st-ch) (send doc-text pos->line/char start))
+  (define-values (ed-ln ed-ch) (send doc-text pos->line/char end))
   (make-Range #:start (make-Position #:line st-ln #:character st-ch)
               #:end (make-Position #:line ed-ln #:character ed-ch)))
 
@@ -365,8 +365,8 @@
 ;; for the first token, its previous token is defined as a zero length fake token which
 ;; has line number 0 and character position 0.
 (define (token-encoding doc token prev-pos)
-  (match-define (list line ch) (send (Doc-text doc) pos->line/char (SemanticToken-start token)))
-  (match-define (list prev-line prev-ch) (send (Doc-text doc) pos->line/char prev-pos))
+  (define-values (line ch) (send (Doc-text doc) pos->line/char (SemanticToken-start token)))
+  (define-values (prev-line prev-ch) (send (Doc-text doc) pos->line/char prev-pos))
   (define delta-line (- line prev-line))
   (define delta-start
     (if (= line prev-line)

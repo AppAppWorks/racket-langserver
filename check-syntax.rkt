@@ -188,11 +188,11 @@
   (define warn-diags (send new-trace get-warn-diags))
 
   ;; reuse old trace if check-syntax failed
-  (list (if valid new-trace #f)
+  (values (if valid new-trace #f)
         (append err-diags (set->list warn-diags) lang-diag diags)))
 
 (provide
   (contract-out
     [check-syntax (-> any/c (is-a?/c lsp-editor%)
-                      (list/c (or/c #f (is-a?/c build-trace%)) any/c))]))
+                      (values (or/c #f (is-a?/c build-trace%)) any/c))]))
 

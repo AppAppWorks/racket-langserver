@@ -136,10 +136,10 @@
                   ;; We want signatures from `scribble/blueboxes` as they have better indentation,
                   ;; but in some super rare cases blueboxes aren't accessible, thus we try to use the
                   ;; parsed signature instead
-                  (match-define (list sigs args-descr)
+                  (define-values (sigs args-descr)
                                 (if tag
                                     (get-docs-for-tag tag)
-                                    (list #f #f)))
+                        (values #f #f)))
                   (define maybe-signature
                     (if sigs
                         (~a "```\n"
@@ -222,7 +222,7 @@
                                   (id-to-tag (first symbol) doc-trace)]
                                  [else #f])]))
                   (cond [tag
-                         (match-define (list sigs docs) (get-docs-for-tag tag))
+                         (define-values (sigs docs) (get-docs-for-tag tag))
                          (if sigs
                              (hasheq 'signatures (map (lambda (sig)
                                                         (hasheq 'label sig
@@ -525,10 +525,10 @@
                  ['range (Range #:start (Pos #:line st-ln #:char st-ch)
                                 #:end (Pos #:line ed-ln #:char ed-ch))])
      (define safe-doc (hash-ref open-docs (string->symbol uri)))
-     (match-define (list start-pos end-pos)
+     (define-values (start-pos end-pos)
                    (with-read-doc safe-doc
                      (λ (doc)
-                       (list (doc-pos doc st-ln st-ch)
+           (values (doc-pos doc st-ln st-ch)
                              (doc-pos doc ed-ln ed-ch)))))
      (semantic-tokens uri id safe-doc start-pos end-pos)]
     [_ (error-response id INVALID-PARAMS "textDocument/semanticTokens/range failed")]))

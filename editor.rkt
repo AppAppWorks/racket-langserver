@@ -64,7 +64,7 @@
       (define line (send core position-paragraph pos))
       (define line-begin (send core paragraph-start-position line))
       (define char (- pos line-begin))
-      (list line char))
+      (values line char))
 
     (define/public (line-start-pos line)
       (send core paragraph-start-position line))

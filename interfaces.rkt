@@ -51,6 +51,6 @@
   [end any/c])
 
 (define (abs-pos->Pos editor pos)
-  (match-define (list line char) (send editor pos->line/char pos))
+  (define-values (line char) (send editor pos->line/char pos))
   (Pos #:line line #:char char))
 

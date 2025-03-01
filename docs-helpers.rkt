@@ -52,9 +52,9 @@
                            [(>= i (length strs)) #f]
                            [(string-prefix? (list-ref strs i) "(") (loop strs (+ i 1))]
                            [else i])))
-         (cond [index (list (take strs index) (string-join (if index (drop strs index) strs) "\n"))]
-               [else (list strs #f)])]
-        [else (list #f #f)]))
+         (cond [index (values (take strs index) (string-join (if index (drop strs index) strs) "\n"))]
+               [else (values strs #f)])]
+        [else (values #f #f)]))
 
 ;; Examples:
 ;; Input: "file:///C:/Program Files/Racket/doc/reference/module.html#(form._((quote._~23~25kernel)._module))" #f
