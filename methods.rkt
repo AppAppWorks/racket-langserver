@@ -7,6 +7,8 @@
          "msg-io.rkt"
          "responses.rkt"
          "struct.rkt"
+         "json-util.rkt"
+         "capabilities.rkt"
          (prefix-in workspace/ "workspace.rkt")
          (prefix-in text-document/ "text-document.rkt"))
 
@@ -53,27 +55,41 @@
 ;; Dispatch
 ;;;;;;;;;;;;;
 
+(define-json-expander RequestMessage
+  (#:required
+   [id (or/c number? string?)]
+   [method string?])
+  (#:optional
+   [params (or/c list? jsobj?)]))
+
+(define-json-expander NotificationMessage
+  (#:required
+   [method string?])
+  (#:optional
+   [params (or/c list? jsobj?)]))
+
 ;; Processes a message. This displays any repsonse it generates
 ;; and should always return void.
 (define (process-message msg)
   (match msg
     ;; Request
-    [(hash-table ['id (? (or/c number? string?) id)]
-                 ['method (? string? method)])
-     (define params (hash-ref msg 'params hasheq))
+    [(RequestMessage #:id id
+                     #:method method
+                     #:params params ?? (hasheq))
+     ;  (define params (hash-ref msg 'params hasheq))
      (define response (process-request id method params))
      ;; the result can be a response or a procedure which returns
      ;; a response. If it's a procedure, then it's expected to run
      ;; concurrently.
      (thread (λ ()
                (display-message/flush
-                 (if (procedure? response)
-                     (response)
-                     response))))
+                (if (procedure? response)
+                    (response)
+                    response))))
      (void)]
     ;; Notification
-    [(hash-table ['method (? string? method)])
-     (define params (hash-ref msg 'params hasheq))
+    [(NotificationMessage #:method method
+                          #:params params ?? (hasheq))
      (process-notification method params)]
     ;; Batch Request
     [(? (non-empty-listof (and/c hash? jsexpr?)))
@@ -161,47 +177,47 @@
 
 (define (initialize id params)
   (match params
-    [(hash-table ['processId (? (or/c number? (json-null)) process-id)]
-                 ['capabilities (? jsexpr? capabilities)])
+    [(InitializeParams #:processId _process-id
+                       #:capabilities capabilities)
      (define sync-options
        (hasheq 'openClose #t
                'change TextDocSync-Incremental
                'willSave #f
                'willSaveWaitUntil #f))
-     (define renameProvider
-       (match capabilities
-         [(hash-table ['textDocument
-                       (hash-table ['rename
-                                    (hash-table ['prepareSupport #t])])])
-          (hasheq 'prepareProvider #t)]
-         [_ #t]))
-     (define semantic-provider
-       (hasheq 'legend (hasheq 'tokenTypes (map symbol->string *semantic-token-types*)
-                               'tokenModifiers (map symbol->string *semantic-token-modifiers*))
-               'full #t
-               'range #t))
      (define server-capabilities
-       (hasheq 'textDocumentSync sync-options
-               'hoverProvider #t
-               'codeActionProvider #t
-               'definitionProvider #t
-               'referencesProvider #t
-               'completionProvider (hasheq 'triggerCharacters (list "("))
-               'signatureHelpProvider (hasheq 'triggerCharacters (list " " ")" "]"))
-               'inlayHintProvider #t
-               'renameProvider renameProvider
-               'semanticTokensProvider semantic-provider
-               'documentHighlightProvider #t
-               'documentSymbolProvider #t
-               'documentFormattingProvider #t
-               'documentRangeFormattingProvider #t
-               'documentOnTypeFormattingProvider (hasheq 'firstTriggerCharacter ")" 'moreTriggerCharacter (list "\n" "]"))
-               'workspace
-               (hasheq 'fileOperations
-                       (hasheq 'didRename ; workspace.fileOperations.didRename
-                                (hasheq 'filters
-                                        (list (hasheq 'scheme "file" 'pattern (hasheq 'glob "**/*.rkt")))))
-                       'workspaceFolders (hasheq 'changeNotifications #t))))
+       (ServerCapabilities
+        #:textDocumentSync sync-options
+        #:completionProvider (hasheq 'triggerCharacters (list "("))
+        #:hoverProvider #t
+        #:signatureHelpProvider (hasheq 'triggerCharacters (list " " ")" "]"))
+        #:definitionProvider #t
+        #:referencesProvider #t
+        #:documentHighlightProvider #t
+        #:documentSymbolProvider #t
+        #:codeActionProvider
+        (CodeActionOptions
+         #:codeActionKinds (list "quickfix" "source")
+         #:resolveProvider #t)
+        #:documentFormattingProvider #t
+        #:documentRangeFormattingProvider #t
+        #:documentOnTypeFormattingProvider
+        (hasheq 'firstTriggerCharacter ")" 'moreTriggerCharacter (list "\n" "]"))
+        #:renameProvider #t
+        #:semanticTokensProvider
+        (SemanticTokensOptions
+         #:legend
+         (SemanticTokensLegend
+          #:tokenTypes (map symbol->string *semantic-token-types*)
+          #:tokenModifiers (map symbol->string *semantic-token-modifiers*))
+         #:range #t
+         #:full #t)
+        #:inlayHintProvider #t
+        #:workspace
+        (hasheq 'fileOperations
+                (hasheq 'didRename ; workspace.fileOperations.didRename
+                        (hasheq 'filters
+                                (list (hasheq 'scheme "file" 'pattern (hasheq 'glob "**/*.rkt")))))
+                'workspaceFolders (hasheq 'changeNotifications #t))))
 
      (define resp (success-response id (hasheq 'capabilities server-capabilities)))
      (set! already-initialized? #t)
@@ -216,7 +232,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (provide
-  (contract-out
-    [process-message
-     (jsexpr? . -> . void?)]))
+ (contract-out
+  [process-message
+   (jsexpr? . -> . void?)]))
 

@@ -26,41 +26,199 @@
 ;; Match Expanders
 ;;;;;;;;;;;;;;;;;;;;
 
+(define-json-expander DidOpenTextDocumentParams
+  (#:required
+   [textDocument jsobj?])
+  (#:optional))
+
+(define-json-expander DidCloseTextDocumentParams
+  (#:required
+   [textDocument jsobj?])
+  (#:optional))
+
+(define-json-expander DidChangeTextDocumentParams
+  (#:required
+   [textDocument jsobj?]
+   [contentChanges (listof jsobj?)])
+  (#:optional))
+
+(define-json-expander TextDocumentPositionParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?])
+  (#:optional))
+
 (define-json-expander Location
-  [uri string?]
-  [range any/c])
+  (#:required
+   [uri string?]
+   [range jsobj?])
+  (#:optional))
 
 (define-json-expander ContentChangeEvent
-  [range any/c]
-  [rangeLength exact-nonnegative-integer?]
-  [text string?])
+  (#:required
+   [range jsobj?]
+   [text string?])
+  (#:optional
+   [rangeLength exact-nonnegative-integer?]))
 
 ;; VersionedTextDocumentIdentifier
 (define-json-expander DocIdentifier
-  [version exact-nonnegative-integer?]
-  [uri string?])
+  (#:required
+   [uri string?])
+  (#:optional
+   [version exact-nonnegative-integer?]))
 
 ;; TextDocumentItem
 (define-json-expander DocItem
-  [uri string?]
-  [languageId string?]
-  [version exact-nonnegative-integer?]
-  [text string?])
+  (#:required
+   [uri string?]
+   [languageId string?]
+   [version exact-nonnegative-integer?]
+   [text string?])
+  (#:optional))
+
+(define-json-expander FindReferencesParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?]
+   [context jsobj?])
+  (#:optional))
+
+(define-json-expander ReferenceContext
+  (#:required
+   [includeDeclaration boolean?])
+  (#:optional))
+
+(define-json-expander DocHighlightParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?])
+  (#:optional))
 
 (define-json-expander DocHighlight
-  [range any/c])
+  (#:required
+   [range jsobj?])
+  (#:optional
+   (kind (one-of/c 1 2 3))))
+
+(define-json-expander RenameParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?]
+   [newName string?])
+  (#:optional))
+
+(define-json-expander PrepareRenameParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?])
+  (#:optional))
 
 (define-json-expander SymbolInfo
-  [name string?]
-  [kind exact-positive-integer?]
-  [location any/c])
+  (#:required
+   [name string?]
+   [kind exact-positive-integer?]
+   [location jsobj?])
+  (#:optional
+   [tags (listof 1)]
+   [deprecated boolean?]
+   [containerName string?]))
+
+(define-json-expander Hover
+  (#:required
+   [contents (or/c string? list?)])
+  (#:optional
+   [range jsobj?]))
+
+(define-json-expander HoverParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?])
+  (#:optional))
 
 (define-json-expander InlayHint
-  ; must a position `Pos`, defined in interfaces.rkt
-  [position any/c]
-  ; should be `string | InlayHintLabelPart[]`
-  ; but let's stay in simple case for now
-  [label string?])
+  (#:required
+   ; must a position `Pos`, defined in interfaces.rkt
+   [position jsobj?]
+   ; should be `string | InlayHintLabelPart[]`
+   ; but let's stay in simple case for now
+   [label (or/c string? list?)])
+  (#:optional
+   [kind (one-of/c 1 2)]
+   [textEdits list?]
+   [tooltip string?]
+   [paddingLeft boolean?]
+   [paddingRight boolean?]
+   [data jsexpr?]))
+
+(define-json-expander InlayHintLabelPart
+  (#:required
+   [value string?])
+  (#:optional
+   [tooltip string?]
+   [location jsobj?]
+   [command jsobj?]))
+
+(define-json-expander CodeActionParams
+  (#:required
+   [textDocument jsobj?]
+   [range jsobj?]
+   [context jsobj?])
+  (#:optional))
+
+(define-json-expander CodeActionContext
+  (#:required
+   [diagnostics list?])
+  (#:optional
+   [only (listof string?)]
+   [triggerKind (one-of/c 1 2)]))
+
+(define-json-expander InlayHintParams
+  (#:required
+   [textDocument jsobj?]
+   [range jsobj?])
+  (#:optional))
+
+(define-json-expander FormattingParams
+  (#:required
+   [textDocument jsobj?]
+   [options jsobj?])
+  (#:optional))
+
+(define-json-expander FormattingOptions
+  (#:required
+   [tabSize exact-nonnegative-integer?]
+   [insertSpaces boolean?])
+  (#:optional
+   [trimTrailingWhitespace boolean?]
+   [insertFinalNewline boolean?]
+   [trimFinalNewlines boolean?]))
+
+(define-json-expander RangeFormattingParams
+  (#:required
+   [textDocument jsobj?]
+   [range jsobj?]
+   [options jsobj?])
+  (#:optional))
+
+(define-json-expander OnTypeFormattingParams
+  (#:required
+   [textDocument jsobj?]
+   [position jsobj?]
+   [ch string?]
+   [options jsobj?])
+  (#:optional))
+
+(define-json-expander FullSemanticTokensParams
+  (#:required
+   [textDocument jsobj?])
+  (#:optional))
+
+(define-json-expander RangeSemanticTokensParams
+  (#:required
+   [textDocument jsobj?]
+   [range jsobj?])
+  (#:optional))
 
 (define (pos->abs-pos doc pos)
   (match-define (Pos #:line line #:char char) pos)
@@ -78,19 +236,20 @@
 ;;;;;;;;;;;;
 
 (define (did-open! params)
-  (match-define (hash-table ['textDocument (DocItem #:uri uri #:version version #:text text)]) params)
+  (match-define (DidOpenTextDocumentParams #:textDocument (DocItem #:uri uri #:version version #:text text)) params)
   (define safe-doc (new-doc uri text version))
   (hash-set! open-docs (string->symbol uri) safe-doc)
   (doc-run-check-syntax! safe-doc))
 
 (define (did-close! params)
-  (match-define (hash-table ['textDocument (DocItem #:uri uri)]) params)
+  (match-define (DidCloseTextDocumentParams #:textDocument (DocItem #:uri uri)) params)
   (hash-remove! open-docs (string->symbol uri))
   (clear-old-queries/doc-close uri))
 
 (define (did-change! params)
-  (match-define (hash-table ['textDocument (DocIdentifier #:version version #:uri uri)]
-                            ['contentChanges content-changes]) params)
+  (match-define (DidChangeTextDocumentParams #:textDocument (DocIdentifier #:uri uri #:version version)
+                                             #:contentChanges content-changes)
+    params)
   (define safe-doc (uri->safe-doc uri))
   (define content-changes*
     (cond [(eq? (json-null) content-changes) empty]
@@ -119,8 +278,8 @@
 ;; be used as the result of the response message.
 (define (hover id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['position (Pos #:line line #:char ch)])
+    [(HoverParams #:textDocument (DocIdentifier #:uri uri)
+                  #:position (Pos #:line line #:char ch))
      (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
@@ -163,9 +322,9 @@
                                                (~a "\n---\n" documentation-text)
                                                ""))
                                        text))
-                  (hasheq 'contents contents
-                          'range (start/end->range doc start end))]
-                 [else (hasheq 'contents empty)]))
+                  (Hover #:contents contents
+                         #:range (start/end->range doc start end))]
+                 [else (Hover #:contents empty)]))
          (success-response id result)))]
     [_
      (error-response id INVALID-PARAMS "textDocument/hover failed")]))
@@ -173,13 +332,17 @@
 ;; Code Action request
 (define (code-action id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['range (Range #:start start #:end _end)]
-                 ; TODO: _ctx has three fields
-                 ; 1. `diagnostics`
-                 ; 2. `only: CodeActionKind[]` server should use this to filter out client-unwanted code action
-                 ; 3. `triggerKind?: CodeActionTriggerKind` the reason why code action were requested
-                 ['context _ctx])
+    [(CodeActionParams #:textDocument (DocIdentifier #:uri uri)
+                       #:range (Range #:start start)
+                       ; TODO: _ctx has three fields
+                       ; 1. `diagnostics`
+                       ; 2. `only: CodeActionKind[]` server should use this to filter out client-unwanted code action
+                       ; 3. `triggerKind?: CodeActionTriggerKind` the reason why code action were requested
+                       #:context (CodeActionContext
+                                  #:diagnostics _diag
+                                  #:only only-kinds ?? '("source" "refactor")
+                                  #:triggerKind _trigger-kind ?? 1))
+
      (define safe-doc (uri->safe-doc uri))
 
      (define act
@@ -188,11 +351,11 @@
            (define doc-trace (Doc-trace doc))
            (interval-map-ref (send doc-trace get-quickfixs)
                              (pos->abs-pos doc start)
-                             #f))))
+                                  #f))))
      (if act
          (success-response id (list act))
          (success-response id (list)))]
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)])
+    [(CodeActionParams #:textDocument (DocIdentifier #:uri uri))
      (error-response id INVALID-PARAMS
                      (format "textDocument/codeAction failed uri is not a path ~a" uri))]
     [_ (error-response id INVALID-PARAMS "textDocument/codeAction failed")]))
@@ -280,9 +443,9 @@
 ;; Reference request
 (define (references id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['position (Pos #:line line #:char char)]
-                 ['context (hash-table ['includeDeclaration include-decl?])])
+    [(FindReferencesParams #:textDocument (DocIdentifier #:uri uri)
+                           #:position (Pos #:line line #:char char)
+                           #:context (ReferenceContext #:includeDeclaration include-decl?))
      (define-values (start end decl) (get-decl uri line char))
 
      (define safe-doc (uri->safe-doc uri))
@@ -291,14 +454,13 @@
        (with-read-doc safe-doc
          (λ (doc)
            (match decl
-             [(Decl req? id left right)
+             [(Decl req? _id left right)
               (define ranges
                 (if req?
                     (list (start/end->range doc start end)
                           (start/end->range doc left right))
-                    (or (get-bindings uri decl))))
-              (for/list ([range (in-list ranges)])
-                (hasheq 'uri uri 'range range))]
+                    (get-bindings uri decl)))
+              (map (λ (range) (Location #:uri uri #:range range)) ranges)]
              [#f (json-null)]))))
      (success-response id result)]
     [_
@@ -307,8 +469,8 @@
 ;; Document Highlight request
 (define (document-highlight id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['position (Pos #:line line #:char char)])
+    [(DocHighlightParams #:textDocument (DocIdentifier #:uri uri)
+                         #:position (Pos #:line line #:char char))
 
      (define safe-doc (uri->safe-doc uri))
 
@@ -324,8 +486,7 @@
                           (start/end->range doc left right))
                     (or (append (get-bindings uri decl)
                                 (list (start/end->range doc left right))))))
-              (for/list ([range (in-list ranges)])
-                (hasheq 'range range))]
+              (map (λ (range) (DocHighlight #:range range)) ranges)]
              [#f (json-null)]))))
      (success-response id result)]
     [_
@@ -334,9 +495,9 @@
 ;; Rename request
 (define (_rename id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['position (Pos #:line line #:char char)]
-                 ['newName new-name])
+    [(RenameParams #:textDocument (DocIdentifier #:uri uri)
+                   #:position (Pos #:line line #:char char)
+                   #:newName new-name)
      (define-values (start end decl) (get-decl uri line char))
 
      (define this-doc (hash-ref open-docs (string->symbol uri)))
@@ -363,8 +524,8 @@
 ;; Prepare rename
 (define (prepareRename id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['position (Pos #:line line #:char char)])
+    [(RenameParams #:textDocument (DocIdentifier #:uri uri)
+                   #:position (Pos #:line line #:char char))
      (define-values (start end decl) (get-decl uri line char))
 
      (define this-doc (hash-ref open-docs (string->symbol uri)))
@@ -446,17 +607,16 @@
 ;; Inlay Hint
 (define (inlay-hint id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['range (Range #:start start #:end end)])
+    [(InlayHintParams #:textDocument (DocIdentifier #:uri uri)
+                      #:range (Range #:start start #:end end))
      (success-response id '())]
     [_ (error-response id INVALID-PARAMS "textDocument/inlayHint failed")]))
 
 ;; Full document formatting request
 (define (formatting! id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['options (as-FormattingOptions opts)])
-
+    [(FormattingParams #:textDocument (DocIdentifier #:uri uri)
+                       #:options (as-FormattingOptions opts))
      (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
@@ -469,10 +629,10 @@
 ;; Range Formatting request
 (define (range-formatting! id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['range (Range #:start (Pos #:line st-ln #:char st-ch)
-                                #:end (Pos #:line ed-ln #:char ed-ch))]
-                 ['options (as-FormattingOptions opts)])
+    [(RangeFormattingParams #:textDocument (DocIdentifier #:uri uri)
+                            #:range (Range #:start (Pos #:line st-ln #:char st-ch)
+                                           #:end (Pos #:line ed-ln #:char ed-ch))
+                            #:options (as-FormattingOptions opts))
      (define safe-doc (uri->safe-doc uri))
      (with-read-doc safe-doc
        (λ (doc)
@@ -483,13 +643,14 @@
 ;; On-type formatting request
 (define (on-type-formatting! id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ;; `position` is assumed to be the cursor position that after the edit.
-                 ;; Therefore, `position - 1` is the position of `ch`.
-                 ;; Also see issue https://github.com/jeapostrophe/racket-langserver/issues/111
-                 ['position (Pos #:line line #:char char)]
-                 ['ch ch]
-                 ['options (as-FormattingOptions opts)])
+    [(OnTypeFormattingParams
+      #:textDocument (DocIdentifier #:uri uri)
+      ;; `position` is assumed to be the cursor position that after the edit.
+      ;; Therefore, `position - 1` is the position of `ch`.
+      ;; Also see issue https://github.com/jeapostrophe/racket-langserver/issues/111
+      #:position (Pos #:line line #:char char)
+      #:ch ch
+      #:options (as-FormattingOptions opts))
      (define safe-doc (uri->safe-doc uri))
 
      (with-read-doc safe-doc
@@ -514,16 +675,16 @@
 
 (define (full-semantic-tokens id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)])
+    [(FullSemanticTokensParams #:textDocument (DocIdentifier #:uri uri))
      (define safe-doc (uri->safe-doc uri))
      (semantic-tokens uri id safe-doc 0 (with-read-doc safe-doc (λ (doc) (doc-endpos doc))))]
     [_ (error-response id INVALID-PARAMS "textDocument/semanticTokens/full failed")]))
 
 (define (range-semantic-tokens id params)
   (match params
-    [(hash-table ['textDocument (DocIdentifier #:uri uri)]
-                 ['range (Range #:start (Pos #:line st-ln #:char st-ch)
-                                #:end (Pos #:line ed-ln #:char ed-ch))])
+    [(RangeSemanticTokensParams #:textDocument (DocIdentifier #:uri uri)
+                                #:range (Range #:start (Pos #:line st-ln #:char st-ch)
+                                               #:end (Pos #:line ed-ln #:char ed-ch)))
      (define safe-doc (uri->safe-doc uri))
      (define-values (start-pos end-pos)
        (with-read-doc safe-doc

@@ -45,7 +45,6 @@
             #:title "Add prefix `_` to ignore"
             #:kind "quickfix"
             #:diagnostics (list diag)
-            #:isPreferred #f
             #:edit (WorkspaceEdit
                      #:changes
                      (hasheq (string->symbol (path->uri src-obj))

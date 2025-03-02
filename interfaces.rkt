@@ -10,35 +10,52 @@
          TextEdit
          CodeAction
          Diagnostic
+         Command
          Pos
          Range
          abs-pos->Pos)
 
 (define-json-expander WorkspaceEdit
-  [changes any/c])
+  (#:required)
+  (#:optional
+   [changes any/c]
+   [documentChanges list?]
+   [changeAnnotations any/c]))
 (define-json-expander TextEdit
-  [range any/c]
-  [newText string?])
+  (#:required
+   [range any/c]
+   [newText string?])
+  (#:optional))
 (define-json-expander CodeAction
-  [title string?]
-  [kind string?]
-  [diagnostics any/c]
-  [isPreferred boolean?]
-  [edit any/c])
-
+  (#:required
+   [title string?])
+  (#:optional
+   [kind string?]
+   [diagnostics list?]
+   [isPreferred boolean?]
+   [edit any/c]
+   [data any/c]))
 (define-json-expander Diagnostic
-  [range any/c]
-  [severity (or/c 1 2 3 4)]
-  [source string?]
-  [message string?])
+  (#:required
+   [range any/c])
+  (#:optional
+   [severity (or/c 1 2 3 4)]
+   [source string?]
+   [message string?]))
+(define-json-expander Command
+  (#:required
+   [title string?]
+   [command string?])
+  (#:optional
+   [arguments list?]))
 
 (define-match-expander Pos
   (λ (stx)
     (syntax-parse stx
       [(_ #:line l #:char c)
        (syntax/loc stx
-         (hash-table ['line (? exact-nonnegative-integer? l)]
-                     ['character (? exact-nonnegative-integer? c)]))]))
+         (hash* ['line (? exact-nonnegative-integer? l)]
+                ['character (? exact-nonnegative-integer? c)]))]))
   (λ (stx)
     (syntax-parse stx
       [(_ #:line l #:char c)
@@ -47,8 +64,10 @@
                  'character c))])))
 
 (define-json-expander Range
-  [start any/c]
-  [end any/c])
+  (#:required
+   [start any/c]
+   [end any/c])
+  (#:optional))
 
 (define (abs-pos->Pos editor pos)
   (define-values (line char) (send editor pos->line/char pos))

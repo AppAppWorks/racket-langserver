@@ -6,17 +6,25 @@
 (require "open-docs.rkt")
 
 (define-json-expander FileRename
-  [oldUri string?]
-  [newUri string?])
+  (#:required
+   [oldUri string?]
+   [newUri string?])
+  (#:optional))
 (define-json-expander  RenameFilesParams
-  [files (listof hash?)])
+  (#:required
+   [files (listof jsobj?)])
+  (#:optional))
 
 (define-json-expander WorkspaceFolder
-  [uri string?]
-  [name string?])
+  (#:required
+   [uri string?]
+   [name string?])
+  (#:optional))
 (define-json-expander WorkspaceFoldersChangeEvent
-  [added (listof hash?)]
-  [removed (listof hash?)])
+  (#:required
+   [added (listof jsobj?)]
+   [removed (listof jsobj?)])
+  (#:optional))
 
 (define workspace-folders (mutable-set))
 
@@ -40,7 +48,7 @@
       (hash-remove! open-docs (string->symbol old-uri)))))
 
 (define (didChangeWorkspaceFolders params)
-  (match-define (hash-table ['event (WorkspaceFoldersChangeEvent #:added added #:removed removed)]) params)
+  (match-define (hash* ['event (WorkspaceFoldersChangeEvent #:added added #:removed removed)]) params)
   (for ([f added])
     (match-define (WorkspaceFolder #:uri uri #:name _) f)
     (set-add! workspace-folders uri))
