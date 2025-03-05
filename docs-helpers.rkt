@@ -5,6 +5,7 @@
          racket/class
          racket/list
          racket/dict
+         racket/match
          setup/collects
          racket/string
          scribble/xref
@@ -33,7 +34,7 @@
   ;; in drracket/private/syncheck/blueboxes-gui.rkt
   (define xref (load-collections-xref))
   (define mps
-    (for/list ([(k require-candidate) (in-dict (send trace get-requires))])
+    (for/list ([require-candidate (dict-values (send trace get-requires))])
       (path->module-path require-candidate #:cache pkg-cache)))
   (for/or ([mp (in-list mps)])
     (define definition-tag (xref-binding->definition-tag xref (list mp (string->symbol id)) #f))
@@ -46,14 +47,13 @@
 (define (get-docs-for-tag tag)
   (define bb-strs (fetch-blueboxes-strs tag #:blueboxes-cache the-bluebox-cache))
   (cond [bb-strs
-         (define strs (drop bb-strs 1))
-         (define index (let loop ((strs strs) (i 0))
-                         (cond
-                           [(>= i (length strs)) #f]
-                           [(string-prefix? (list-ref strs i) "(") (loop strs (+ i 1))]
-                           [else i])))
-         (cond [index (values (take strs index) (string-join (if index (drop strs index) strs) "\n"))]
-               [else (values strs #f)])]
+         (let loop ([strs (drop bb-strs 1)] [prefix '()])
+           (match strs
+             [(cons "(" suffix)
+              (values (reverse prefix) (string-join suffix "\n"))]
+             [(cons char strs)
+              (loop strs (cons char prefix))]
+             ['() (values (reverse prefix) #f)]))]
         [else (values #f #f)]))
 
 ;; Examples:

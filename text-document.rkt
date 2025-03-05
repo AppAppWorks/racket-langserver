@@ -288,13 +288,13 @@
          (define pos (doc-pos doc line ch))
          (define-values (start end text)
            (interval-map-ref/bounds hovers pos #f))
-         (match-define (list link tag)
-           (interval-map-ref (send doc-trace get-docs) pos (list #f #f)))
          (define result
            (cond [text
                   ;; We want signatures from `scribble/blueboxes` as they have better indentation,
                   ;; but in some super rare cases blueboxes aren't accessible, thus we try to use the
                   ;; parsed signature instead
+                  (match-define (list link tag)
+                    (interval-map-ref (send doc-trace get-docs) pos (list #f #f)))
                   (define-values (sigs args-descr)
                     (if tag
                         (get-docs-for-tag tag)

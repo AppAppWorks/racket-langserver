@@ -135,11 +135,15 @@
      (let loop ([i pos] [p 0])
        (cond
          [(< i 0) #f]
-         [(or (char=? (string-ref text i) #\() (char=? (string-ref text i) #\[))
-          (if (> p 0) (loop (- i 1) (- p 1)) i)]
-         [(or (char=? (string-ref text i) #\)) (char=? (string-ref text i) #\]))
-          (loop (- i 1) (+ p 1))]
-         [else (loop (- i 1) p)]))]))
+         [else
+          (match (string-ref text i)
+            [open
+             #:when (or (char=? open #\() (char=? open #\[))
+             (if (> p 0) (loop (sub1 i) (sub1 p)) i)]
+            [close
+             #:when (or (char=? close #\)) (char=? close #\]))
+             (loop (sub1 i) (add1 p))]
+            [_ (loop (sub1 i) p)])]))]))
 
 (define (get-symbols doc-text)
   (define text (send doc-text get-text))
@@ -230,49 +234,64 @@
 (define (format! doc st-ln st-ch ed-ln ed-ch
                  #:on-type? [on-type? #f]
                  #:formatting-options opts)
-  (define doc-text (Doc-text doc))
   (define doc-trace (Doc-trace doc))
-
   (define indenter (send doc-trace get-indenter))
-  (define start-pos (doc-pos doc st-ln st-ch))
-  ;; Adjust for line endings (#92)
-  (define end-pos (max start-pos (sub1 (doc-pos doc ed-ln ed-ch))))
-  (define start-line (send doc-text at-line start-pos))
-  (define end-line (send doc-text at-line end-pos))
 
-  (define mut-doc-text (send doc-text copy))
-  ;; replace \t with spaces at line `(sub1 start-line)`
-  ;; as we cannot make `compute-racket-amount-to-indent`
-  ;; to respect the given tab size
-  (replace-tab! mut-doc-text
-                (max 0 (sub1 start-line))
-                (FormattingOptions-tab-size opts))
+  (match indenter
+    ['missing (json-null)]
+    [_
+     (define doc-text (Doc-text doc))
+     (define start-pos (doc-pos doc st-ln st-ch))
+     ;; Adjust for line endings (#92)
+     (define end-pos (max start-pos (sub1 (doc-pos doc ed-ln ed-ch))))
+     (define start-line (send doc-text at-line start-pos))
+     (define end-line (send doc-text at-line end-pos))
 
-  (define indenter-wp (indenter-wrapper indenter mut-doc-text on-type?))
-  (define skip-this-line? #f)
+     (define mut-doc-text (send doc-text copy))
+     ;; replace \t with spaces at line `(sub1 start-line)`
+     ;; as we cannot make `compute-racket-amount-to-indent`
+     ;; to respect the given tab size
+     (replace-tab! mut-doc-text
+                   (max 0 (sub1 start-line))
+                   (FormattingOptions-tab-size opts))
 
-  (if (eq? indenter 'missing) (json-null)
-      (let loop ([line start-line])
-        (define line-start (send mut-doc-text line-start-pos line))
-        (define line-end (send mut-doc-text line-end-pos line))
-        (for ([i (range line-start (add1 line-end))])
-          (when (and (char=? #\" (send mut-doc-text get-char i))
-                     (not (char=? #\\ (send mut-doc-text get-char (sub1 i)))))
-            (set! skip-this-line? (not skip-this-line?))))
-        (if (> line end-line)
-            null
-            (append (filter-map
-                      values
-                      ;; NOTE: The order is important here.
-                      ;; `remove-trailing-space!` deletes content relative to the initial document
-                      ;; position. If we were to instead call `indent-line!` first and then
-                      ;; `remove-trailing-space!` second, the remove step could result in
-                      ;; losing user entered code.
-                      (list (if (false? (FormattingOptions-trim-trailing-whitespace opts))
-                                #f
-                                (remove-trailing-space! mut-doc-text skip-this-line? line))
-                            (indent-line! mut-doc-text indenter-wp line)))
-                    (loop (add1 line)))))))
+     (define indenter-wp (indenter-wrapper indenter mut-doc-text on-type?))
+
+     (for/fold ([edits '()]
+                #:result (reverse edits))
+               ([line (in-range start-line (add1 end-line))])
+
+       ;; NOTE: The order is important here.
+       ;; `remove-trailing-space!` deletes content relative to the initial document
+       ;; position. If we were to instead call `indent-line!` first and then
+       ;; `remove-trailing-space!` second, the remove step could result in
+       ;; losing user entered code.
+       (define remove-trailing-space
+         (match (FormattingOptions-trim-trailing-whitespace opts)
+           [#f #f]
+           [_
+            (define line-start (send mut-doc-text line-start-pos line))
+            (define line-end (send mut-doc-text line-end-pos line))
+
+            (for/fold ([prev-char (and (> line-start 0)
+                                       (send mut-doc-text get-char (sub1 line-start)))]
+                       [skip-this-line? #f]
+                       #:result (remove-trailing-space! mut-doc-text skip-this-line? line))
+                      ([i (in-range line-start (add1 line-end))])
+              (define char (send mut-doc-text get-char i))
+              (values char
+                      (if (and (char=? #\" char)
+                               (not (char=? #\\ prev-char)))
+                          (not skip-this-line?)
+                          skip-this-line?)))]))
+
+       (define indent-line (indent-line! mut-doc-text indenter-wp line))
+
+       (match* (remove-trailing-space indent-line)
+         [(#f #f) edits]
+         [(remove-trailing-space #f) (cons remove-trailing-space edits)]
+         [(#f indent-line) (cons indent-line edits)]
+         [(remove-trailing-space indent-line) (cons indent-line (cons remove-trailing-space edits))]))]))
 
 (define (replace-tab! doc-text line tabsize)
   (define old-line (send doc-text get-line line))
@@ -297,11 +316,16 @@
 
 ;; Returns a TextEdit, or #f if the line is a part of multiple-line string
 (define (remove-trailing-space! doc-text in-string? line)
-  (define line-text (send doc-text get-line line))
   (cond
     [(not in-string?)
-     (define from (string-length (string-trim line-text #px"\\s+" #:left? #f)))
+     (define line-text (send doc-text get-line line))
      (define to (string-length line-text))
+     (define from
+       (add1
+        (or (for/first ([i (in-range (sub1 to) -1 -1)]
+                        #:when (not (char-whitespace? (string-ref line-text i))))
+              i)
+            -1)))
      (send doc-text replace-in-line "" line from to)
      (TextEdit #:range (Range #:start (Pos #:line line #:char from)
                               #:end (Pos #:line line #:char to))
@@ -318,20 +342,24 @@
 
 ;; Returns a TextEdit, or #f if the line is already correct.
 (define (indent-line! doc-text indenter line)
-  (define content (send doc-text get-line line))
-  (define old-indent-string (extract-indent-string content))
-  (define expect-indent (indenter line))
-  (define really-indent (string-length old-indent-string))
-  (define has-tab? (string-contains? old-indent-string "\t"))
+  (cond
+    [(indenter line)
+     =>
+     (λ (expect-indent)
+       (define content (send doc-text get-line line))
+       (define old-indent-string (extract-indent-string content))
+       (define really-indent (string-length old-indent-string))
+       (define has-tab? (string-contains? old-indent-string "\t"))
 
-  (cond [(false? expect-indent) #f]
-        [(and (= expect-indent really-indent) (not has-tab?)) #f]
-        [else
-         (define new-text (make-string expect-indent #\space))
-         (send doc-text replace-in-line new-text line 0 really-indent)
-         (TextEdit #:range (Range #:start (Pos #:line line #:char 0)
-                                  #:end (Pos #:line line #:char really-indent))
-                   #:newText new-text)]))
+       (cond
+         [(and (= expect-indent really-indent) (not has-tab?)) #f]
+         [else
+          (define new-text (make-string expect-indent #\space))
+          (send doc-text replace-in-line new-text line 0 really-indent)
+          (TextEdit #:range (Range #:start (Pos #:line line #:char 0)
+                                   #:end (Pos #:line line #:char really-indent))
+                    #:newText new-text)]))]
+    [else #f]))
 
 (define (token-type-encoding token)
   (index-of *semantic-token-types* (SemanticToken-type token)))
