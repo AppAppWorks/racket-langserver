@@ -214,11 +214,13 @@
 (define (get-definition-by-id path id)
   (define doc-text (new lsp-editor%))
   (send doc-text load-file path)
-  (match-define (cons start end) (get-def path doc-text id))
-  (define-values (st-ln st-ch) (send doc-text pos->line/char start))
-  (define-values (ed-ln ed-ch) (send doc-text pos->line/char end))
-  (make-Range #:start (make-Position #:line st-ln #:character st-ch)
-              #:end (make-Position #:line ed-ln #:character ed-ch)))
+  (match (get-def path doc-text id)
+    [(cons start end)
+     (define-values (st-ln st-ch) (send doc-text pos->line/char start))
+     (define-values (ed-ln ed-ch) (send doc-text pos->line/char end))
+     (make-Range #:start (make-Position #:line st-ln #:character st-ch)
+                 #:end (make-Position #:line ed-ln #:character ed-ch))]
+    [#f #f]))
 
 ;; definition END ;;
 

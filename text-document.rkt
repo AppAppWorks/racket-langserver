@@ -445,8 +445,11 @@
               (Location #:uri uri
                         #:range (start/end->range doc start end))]
              [(Decl path id 0 0)
-              (Location #:uri (path->uri path)
-                        #:range (Range->hash (get-definition-by-id path id)))]))))
+              (match (get-definition-by-id path id)
+                [#f (json-null)]
+                [range
+                 (Location #:uri (path->uri path)
+                           #:range (Range->hash range))])]))))
      (success-response id result)]
     [_
      (error-response id INVALID-PARAMS "textDocument/definition failed")]))
