@@ -344,17 +344,28 @@
                                   #:triggerKind _trigger-kind ?? 1))
 
      (define safe-doc (uri->safe-doc uri))
-
-     (define act
+     (define acts
        (with-read-doc safe-doc
          (λ (doc)
            (define doc-trace (Doc-trace doc))
-           (interval-map-ref (send doc-trace get-quickfixs)
-                             (pos->abs-pos doc start)
-                                  #f))))
-     (if act
-         (success-response id (list act))
-         (success-response id (list)))]
+           (define unused-reqs (send doc-trace get-unused-reqs))
+           (define remove-unused-requires
+             (if (or (hash-empty? unused-reqs)
+                     (not (set-member? only-kinds "source")))
+                 #f
+                 (CodeAction #:title "Remove unused requires"
+                             #:kind "source.organizeImports"
+                             #:data uri)))
+           (define quickfixes
+             (interval-map-ref (send doc-trace get-quickfixs)
+                               (pos->abs-pos doc start)
+                               #f))
+           (match* (remove-unused-requires quickfixes)
+             [(#f #f) '()]
+             [(_ #f) (list remove-unused-requires)]
+             [(#f _) (list quickfixes)]
+             [(_ _) (list remove-unused-requires quickfixes)]))))
+     (success-response id acts)]
     [(CodeActionParams #:textDocument (DocIdentifier #:uri uri))
      (error-response id INVALID-PARAMS
                      (format "textDocument/codeAction failed uri is not a path ~a" uri))]

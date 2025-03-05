@@ -60,6 +60,7 @@
     (define/public (get-sym-bindings) (cadr (send decls get)))
     (define/public (get-definitions) (send definitions get))
     (define/public (get-quickfixs) (cadr (send diag get)))
+    (define/public (get-unused-reqs) (caddr (send diag get)))
     (define/public (get-semantic-tokens) (send semantic-tokens get))
 
     ;; Overrides

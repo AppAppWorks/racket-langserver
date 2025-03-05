@@ -18,13 +18,15 @@
 
     (define warn-diags (mutable-seteq))
     (define quickfixs (make-interval-map))
+    (define unused-reqs (make-hasheq))
 
     (define/override (get)
-      (list warn-diags quickfixs))
+      (list warn-diags quickfixs unused-reqs))
 
     (define/override (reset)
       (set-clear! warn-diags)
-      (set! quickfixs (make-interval-map)))
+      (set! quickfixs (make-interval-map))
+      (hash-clear! unused-reqs))
 
     (define/override (syncheck:add-mouse-over-status src-obj start finish text)
       (when (string=? "no bound occurrences" text)
@@ -42,24 +44,26 @@
 
         (define code-action
           (CodeAction
-            #:title "Add prefix `_` to ignore"
-            #:kind "quickfix"
-            #:diagnostics (list diag)
-            #:edit (WorkspaceEdit
-                     #:changes
-                     (hasheq (string->symbol (path->uri src-obj))
-                             (list (TextEdit #:range (Range #:start (abs-pos->Pos doc-text start)
-                                                            #:end (abs-pos->Pos doc-text start))
-                                             #:newText "_"))))))
-
+           #:title "Add prefix `_` to ignore"
+           #:kind "quickfix"
+           #:diagnostics (list diag)
+           #:edit (WorkspaceEdit
+                   #:changes
+                   (hasheq (string->symbol (path->uri src-obj))
+                           (list (TextEdit #:range (Range #:start (abs-pos->Pos doc-text start)
+                                                          #:end (abs-pos->Pos doc-text start))
+                                           #:newText "_"))))))
         (interval-map-set! quickfixs start (add1 finish) code-action)
         (set-add! warn-diags diag)))
 
-    (define/override (syncheck:add-unused-require _src left right)
-      (define diag (Diagnostic #:range (Range #:start (abs-pos->Pos doc-text left)
-                                              #:end (abs-pos->Pos doc-text right))
+    (define/override (syncheck:add-unused-require _src start end)
+      (define range
+        (Range #:start (abs-pos->Pos doc-text start)
+               #:end (abs-pos->Pos doc-text end)) )
+      (define diag (Diagnostic #:range range
                                #:severity Diag-Information
                                #:source "Racket"
                                #:message "unused require"))
-      (set-add! warn-diags diag))))
+      (set-add! warn-diags diag)
+      (hash-set! unused-reqs start end))))
 

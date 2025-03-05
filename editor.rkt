@@ -100,4 +100,10 @@
     (define/public (run-indenter indenter char-pos)
       (indenter core char-pos))
 
+    (define/public (get-token-range pos)
+      (send core get-token-range pos))
+
+    (define/public (classify-position pos)
+      (send core classify-position pos))
+
     (super-new)))

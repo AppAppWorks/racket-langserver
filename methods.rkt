@@ -10,7 +10,8 @@
          "json-util.rkt"
          "capabilities.rkt"
          (prefix-in workspace/ "workspace.rkt")
-         (prefix-in text-document/ "text-document.rkt"))
+         (prefix-in text-document/ "text-document.rkt")
+         (prefix-in code-action/ "code-action.rkt"))
 
 ;; Process a request or an notification.
 ;;
@@ -120,6 +121,8 @@
        (text-document/hover id params)]
       ["textDocument/codeAction"
        (text-document/code-action id params)]
+      ["codeAction/resolve"
+       (code-action/resolve id params)]
       ["textDocument/completion"
        (text-document/completion id params)]
       ["textDocument/signatureHelp"
