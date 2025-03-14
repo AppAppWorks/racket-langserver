@@ -16,16 +16,20 @@
 
 (require (for-syntax racket/base)
          racket/set
+         racket/hash
          syntax/kerncase
          racket/sequence
          racket/bool)
 (provide walk walk-module)
 
+(define (hash-union+ hash-1 hash-2)
+  (hash-union hash-1 hash-2 #:combine (λ (a _) a)))
+
 (define (walk* stxs phase)
   (let loop ([ls (syntax->list stxs)])
     (if (null? ls)
-        (seteq)
-        (set-union (walk (car ls) phase) (loop (cdr ls))))))
+        (hasheq)
+        (hash-union+ (walk (car ls) phase) (loop (cdr ls))))))
 
 (define (visible? id)
   (for/and ([scope (in-list
@@ -36,13 +40,13 @@
 (define (visible stx)
   (syntax-case stx ()
     [(a . b)
-     (set-union (visible #'a) (visible #'b))]
+     (hash-union+ (visible #'a) (visible #'b))]
     [x
      (identifier? #'x)
      (if (visible? #'x)
-         (seteq (syntax-e #'x))
-         (seteq))]
-    [_ (seteq)]))
+         (hasheq (syntax-e #'x) #t)
+         (hasheq))]
+    [_ (hasheq)]))
 
 (define-syntax (for/union stx)
   (syntax-case stx ()
@@ -59,7 +63,7 @@
 
 (define (walk stx [phase (namespace-base-phase)])
   (define sym-set
-    (set-union
+    (hash-union+
      (kernel-syntax-case/phase
       stx phase
       [(#%expression ?expr) (walk #'?expr phase)]
@@ -74,32 +78,32 @@
       [(begin0 ?expr ...)
        (walk* #'(?expr ...) phase)]
       [(begin-for-syntax ?expr ...)
-       (walk* #'(?expr ...) (+ phase 1))]
+       (walk* #'(?expr ...) (add1 phase))]
       [(define-values (?id ...) ?expr)
-       (set-union (visible #'(?id ...)) (walk #'?expr phase))]
+       (hash-union+ (visible #'(?id ...)) (walk #'?expr phase))]
       [(define-syntaxes (?id ...) ?expr)
-       (set-union (visible #'(?id ...)) (walk #'?expr (+ phase 1)))]
+       (hash-union+ (visible #'(?id ...)) (walk #'?expr (add1 phase)))]
       [(#%plain-lambda ?formals ?expr ...)
-       (set-union (visible #'?formals) (walk* #'(?expr ...) phase))]
+       (hash-union+ (visible #'?formals) (walk* #'(?expr ...) phase))]
       [(case-lambda (?formals ?expr ...) ...)
-       (set-union (visible #'(?formals ...)) (walk* #'(?expr ... ...) phase))]
+       (hash-union+ (visible #'(?formals ...)) (walk* #'(?expr ... ...) phase))]
       [(if ?expr ...)
        (walk* #'(?expr ...) phase)]
       [(let-values ([(?id ...) ?expr] ...)
          ?body ...)
-       (set-union (visible #'(?id ... ...))
-                  (walk* #'(?expr ... ?body ...) phase))]
+       (hash-union+ (visible #'(?id ... ...))
+                    (walk* #'(?expr ... ?body ...) phase))]
       [(letrec-values ([(?id ...) ?expr] ...)
          ?body ...)
-       (set-union (visible #'(?id ... ...))
-                  (walk* #'(?expr ... ?body ...) phase))]
+       (hash-union+ (visible #'(?id ... ...))
+                    (walk* #'(?expr ... ?body ...) phase))]
       [(set! ?id ?expr)
        (walk #'?expr phase)]
       [(with-continuation-mark ?expr ...)
        (walk* #'(?expr ...) phase)]
       [(#%plain-app ?expr ...)
        (walk* #'(?expr ...) phase)]
-      [_ (seteq)])
+      [_ (hasheq)])
      (visible (syntax-property stx 'disappeared-binding))))
   sym-set)
 
@@ -107,7 +111,7 @@
 
   (define declared-modules (mutable-set))
 
-  (define ids (mutable-set))
+  (define ids (make-hash))
 
   (define alls (mutable-set))
   (define prefixs (mutable-set))
@@ -142,7 +146,7 @@
          (with-datum ([mod #'?raw-module-path]
                       [id* #'(?id ...)])
            (for ([id (in-list id*)])
-             (set-add! ids id))))]
+             (hash-set! ids id mod))))]
       [(prefix ?prefix-id ?raw-module-path)
        (when (visible? #'?raw-module-path)
          (with-datum ([mod #'?raw-module-path]
@@ -166,7 +170,7 @@
        (with-datum ([mod #'?raw-module-path]
                     [id #'?id])
          (when (visible? #'?id)
-           (set-add! ids id)))]
+           (hash-set! ids id mod)))]
       [?raw-module-path
        (when (visible? #'?raw-module-path)
          (with-datum ([mod #'?raw-module-path])
@@ -196,9 +200,9 @@
            (each phaseless-spec #'(?phaseless-spec ...)
                  (- just (or level 0))))]
         [(for-syntax ?phaseless-spec ...)
-         (each phaseless-spec #'(?phaseless-spec ...) (- just 1))]
+         (each phaseless-spec #'(?phaseless-spec ...) (sub1 just))]
         [(for-template ?phaseless-spec ...)
-         (each phaseless-spec #'(?phaseless-spec ...) (- just -1))]
+         (each phaseless-spec #'(?phaseless-spec ...) (add1 just))]
         [(for-label ?phaseless-spec ...)
          (each phaseless-spec #'(?phaseless-spec ...) just)]
         [?phaseless-spec
@@ -253,6 +257,8 @@
        (walk* #'(?form ...) (namespace-base-phase))
 
        (define (get-exports mod just)
+      ;  do something to handle lexical scoping!!
+      ; exports may contain scope information
          (define (filter-exports exports)
            (cond
              [(not just) (for/union ([p (in-list exports)])
@@ -270,19 +276,29 @@
 
        (for ([jm (in-set alls)])
          (for ([id (in-set (get-exports (cdr jm) (car jm)))])
-           (set-add! ids id)))
+           (hash-set! ids id (normalize-mod (cdr jm)))))
        (for ([jm (in-set prefixs)])
          (for ([id (in-set (get-exports (cadr jm) (car jm)))])
-           (set-add! ids (string->symbol (string-append (symbol->string (cddr jm))
-                                                        (symbol->string id))))))
+           (hash-set! ids (string->symbol (string-append (symbol->string (cddr jm))
+                                                         (symbol->string id))) (normalize-mod (cadr jm)))))
        (for ([jm (in-set all-excepts)])
          (define e (foldl (λ (v s) (set-remove s v)) (get-exports (cadr jm) (car jm)) (cddr jm)))
          (for ([id (in-set e)])
-           (set-add! ids id)))
+           (hash-set! ids id (normalize-mod (cadr jm)))))
 
        (for ([jm (in-set prefix-all-excepts)])
-         (define e (foldl (λ (v s) (set-remove s v)) (get-exports (cadr jm) (car jm)) (cdddr jm)))
+         (define e (foldl (λ (v s)
+                            (set-remove s v))
+                          (get-exports (cadr jm) (car jm))
+                          (cdddr jm)))
          (for ([id (in-set e)])
-           (set-add! ids (string->symbol (string-append (symbol->string (caddr jm))
-                                                        (symbol->string id)))))))])
+           (hash-set! ids (string->symbol (string-append (symbol->string (caddr jm))
+                                                         (symbol->string id))) (normalize-mod (cadr jm))))))])
   ids)
+
+(define (normalize-mod mod)
+  (cond
+    [(string? mod) mod]
+    [(symbol? mod) mod]
+    [(path? mod) (path->string mod)]
+    [else #f]))

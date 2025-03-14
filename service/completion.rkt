@@ -3,25 +3,23 @@
 (require "interface.rkt"
          "../autocomplete.rkt"
          racket/class
-         racket/set)
+         racket/hash)
 
 (provide completion%)
 
 (define completion%
   (class base-service%
     (super-new)
-    (define completions (list))
+    (define completions (hash))
 
     (define/override (get)
       completions)
 
     (define/override (reset)
-      (set! completions (list)))
+      (set! completions (hash)))
 
     (define/override (walk-stx stx expanded-stx)
-      (define c (append (set->list (walk expanded-stx))
-                        (set->list (walk-module expanded-stx))))
-      (set! completions c))
-
-    ))
+      (define c (hash-union (walk expanded-stx)
+                            (walk-module expanded-stx) #:combine (λ (a _b) a)))
+                            (set! completions c))))
 

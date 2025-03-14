@@ -9,6 +9,7 @@
          racket/string
          racket/set
          racket/dict
+         racket/path
          "error-codes.rkt"
          "interfaces.rkt"
          "json-util.rkt"
@@ -419,9 +420,29 @@
        (λ (doc)
          (define doc-trace (Doc-trace doc))
          (define completions (send doc-trace get-completions))
+         (define path (path->string (file-name-from-path (string->path uri))))
          (define result
-           (for/list ([completion (in-list completions)])
-             (hasheq 'label (symbol->string completion))))
+           (hash-map
+            completions
+            (λ (lbl desc)
+              (define lbl-str (symbol->string lbl))
+              (match desc
+                [#t
+                 (hasheq 'label lbl-str
+                         'sortText (string-append "!" lbl-str)
+                         'detail path)]
+                [sym
+                 #:when (symbol? sym)
+                 (hasheq 'label lbl-str
+                         'detail (symbol->string sym))]
+                [source
+                 #:when (string? source)
+                 (define filename (path->string (file-name-from-path (string->path source))))
+                 (hasheq 'label lbl-str
+                         'sortText (string-append "\"" lbl-str)
+                         'detail filename)]
+                [_
+                 (hasheq 'label lbl-str)]))))
          (success-response id result)))]
     [_
      (error-response id INVALID-PARAMS "textDocument/completion failed")]))
