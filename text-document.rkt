@@ -453,24 +453,26 @@
   (match params
     [(hash-table ['textDocument (DocIdentifier #:uri uri)]
                  ['position (Pos #:line line #:char char)])
-     (define-values (start end decl) (get-decl uri line char))
-
      (define safe-doc (uri->safe-doc uri))
 
      (define result
        (with-read-doc safe-doc
          (λ (doc)
-           (match decl
-             [#f (json-null)]
-             [(Decl #f id start end)
-              (Location #:uri uri
-                        #:range (start/end->range doc start end))]
-             [(Decl path id 0 0)
-              (match (get-definition-by-id path id)
-                [#f (json-null)]
-                [range
-                 (Location #:uri (path->uri path)
-                           #:range (Range->hash range))])]))))
+           (match/values
+            (get-decl uri line char #t)
+            [(_ _ (Decl #f _id start end))
+             (Location #:uri uri
+                       #:range (start/end->range doc start end))]
+            [(_ _ (Decl path id 0 0))
+             (match (get-definition-by-id path id)
+               [#f (json-null)]
+               [range
+                (Location #:uri (path->uri path)
+                          #:range (Range->hash range))])]
+            [(#f #f #f) (json-null)]
+            [(start end #f)
+             (Location #:uri uri
+                       #:range (start/end->range doc start end))]))))
      (success-response id result)]
     [_
      (error-response id INVALID-PARAMS "textDocument/definition failed")]))
@@ -482,21 +484,13 @@
                            #:position (Pos #:line line #:char char)
                            #:context (ReferenceContext #:includeDeclaration include-decl?))
      (define-values (start end decl) (get-decl uri line char))
-
-     (define safe-doc (uri->safe-doc uri))
-
      (define result
-       (with-read-doc safe-doc
-         (λ (doc)
-           (match decl
-             [(Decl req? _id left right)
-              (define ranges
-                (if req?
-                    (list (start/end->range doc start end)
-                          (start/end->range doc left right))
-                    (get-bindings uri decl)))
-              (map (λ (range) (Location #:uri uri #:range range)) ranges)]
-             [#f (json-null)]))))
+       (match decl
+         [(Decl req? _ _ _)
+          (define decl^ (if req? (Decl #f #f start end) decl))
+          (define ranges (get-bindings uri decl^ include-decl?))
+          (map (λ (range) (Location #:uri uri #:range range)) ranges)]
+         [#f (json-null)]))
      (success-response id result)]
     [_
      (error-response id INVALID-PARAMS "textDocument/references failed")]))
@@ -575,41 +569,38 @@
 ;; symbol at the given position. If #:include-decl is #t, the list includes
 ;; the declaration. If #:include-decl is 'all, the list includes the declaration
 ;; and all bound occurrences.
-(define (get-bindings uri decl)
+(define (get-bindings uri decl [include-decl? #f])
   (define safe-doc (uri->safe-doc uri))
   (with-read-doc safe-doc
     (λ (doc)
       (define doc-trace (Doc-trace doc))
-
       (define doc-decls (send doc-trace get-sym-decls))
-      (match-define (Decl req? id left right) decl)
-      (define-values (bind-start bind-end bindings)
-        (interval-map-ref/bounds doc-decls left #f))
-      (if bindings
-          (for/list ([range (in-set bindings)])
-            (start/end->range doc (car range) (cdr range)))
-          empty))))
+      (define bindings
+        (interval-map-ref doc-decls (Decl-left decl) '()))
+      (for/list ([range (in-set bindings)]
+                 #:do [(match-define (cons start end) range)])
+        (start/end->range doc start end)))))
 
-(define (get-decl uri line char)
+(define (get-decl uri line char [for-def? #f])
   (define safe-doc (uri->safe-doc uri))
   (with-read-doc safe-doc
     (λ (doc)
       (define doc-trace (Doc-trace doc))
 
       (define pos (doc-pos doc line char))
-      (define doc-decls (send doc-trace get-sym-decls))
       (define doc-bindings (send doc-trace get-sym-bindings))
       (define-values (start end maybe-decl)
         (interval-map-ref/bounds doc-bindings pos #f))
-      (define-values (bind-start bind-end maybe-bindings)
-        (interval-map-ref/bounds doc-decls pos #f))
       (if maybe-decl
           (values start end maybe-decl)
-          (if maybe-bindings
-              (values bind-start
-                      bind-end
-                      (interval-map-ref doc-bindings (car (set-first maybe-bindings)) #f))
-              (values #f #f #f))))))
+          (let*-values
+              ([(doc-decls) (send doc-trace get-sym-decls)]
+               [(bind-start bind-end maybe-bindings) (interval-map-ref/bounds doc-decls pos #f)])
+            (if maybe-bindings
+                (values bind-start
+                        bind-end
+                        (if for-def? #f (interval-map-ref doc-bindings (car (set-first maybe-bindings)) #f)))
+                (values #f #f #f)))))))
 
 ;; Document Symbol request
 (define (document-symbol id params)
